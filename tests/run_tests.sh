@@ -28,6 +28,11 @@ check "cat txt/phrases.txt"
 check "sort txt/phrases.txt"
 check "grep burn txt/phrases.txt"
 check "wc txt/phrases.txt"
+check "ls -R"
+check "uniq txt/phrases.txt"
+check "grep -n burn txt/phrases.txt"
+check "cal"
+check "cal -y"
 
 echo "$passed passed, $failed failed"
 [ $failed -eq 0 ]
