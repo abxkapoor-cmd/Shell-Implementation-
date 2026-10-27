@@ -9,3 +9,4 @@ jobs:
    - uses: actions/checkout@v4
    - run: cmake -S . -B build
    - run: cmake --build build
+   - run: ./tests/run_tests.sh
