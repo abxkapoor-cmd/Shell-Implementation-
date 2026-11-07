@@ -22,5 +22,9 @@ int main(int argc, char *argv[]){
             parse_command(line, args, &argsc);
             launch_program(args, argsc);
             reap();
-  
+        }
+    }
+
+    return 0;
+}
 
