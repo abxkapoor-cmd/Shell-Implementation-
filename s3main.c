@@ -14,15 +14,13 @@ int main(int argc, char *argv[]){
 
     while (1) {
         read_command_line(line);
-
-        parse_command(line, args, &argsc);
-
-        launch_program(args, argsc); 
-
-        reap();
-    }
-
-    return 0;
-    
-}
+        if (command_with_redirection(line)) {        // has < or > ?
+            parse_command(line, args, &argsc);
+            launch_program_with_redirection(args, argsc);
+            reap();
+        } else {                                     
+            parse_command(line, args, &argsc);
+            launch_program(args, argsc);
+            reap();
+  
 
