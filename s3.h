@@ -25,6 +25,14 @@ enum ArgIndex
     ARG_3,
 };
 
+enum RedirType
+{
+    REDIR_NONE,   /// no operator
+    REDIR_IN,     /// <   read stdin from a file
+    REDIR_OUT,    /// >   write stdout to a file (overwrite)
+    REDIR_APPEND, /// >>  write stdout to a file (append)
+};
+
 ///With inline functions, the compiler replaces the function call 
 ///with the actual function code;
 ///inline improves speed and readability; meant for short functions (a few lines).
@@ -38,6 +46,11 @@ static inline void reap()
 void read_command_line(char line[]);
 void construct_shell_prompt(char shell_prompt[]);
 void parse_command(char line[], char *args[], int *argsc);
+
+// redirection parsing
+int command_with_redirection(char line[]);
+int find_redirection(char *args[], int argsc, enum RedirType *type);
+
 
 ///Child functions (add more as appropriate)
 void child(char *args[], int argsc);
