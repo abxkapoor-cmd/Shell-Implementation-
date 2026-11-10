@@ -8,6 +8,11 @@ int main(void)
     int argsc;
 
     while (read_command_line(line)) {
+        if (command_with_pipe(line)) {
+            launch_pipeline(line);
+            continue;
+        }
+
         int redirected = command_with_redirection(line);
         if (!parse_command(line, args, &argsc) || argsc == 0)
             continue;

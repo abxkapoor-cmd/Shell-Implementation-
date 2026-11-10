@@ -1,4 +1,4 @@
-"""Behavior checks for basic commands and a single redirection only."""
+"""Behavior checks for commands, redirection, and two-command pipelines."""
 import os
 from pathlib import Path
 import subprocess
@@ -27,6 +27,16 @@ def compare(text, cwd):
 with tempfile.TemporaryDirectory() as directory:
     for text in [
         'echo hello\nexit\n',
+        'echo hello | wc -c\n',
+        'echo hello|cat\n',
+        'printf "b\\na\\n" | sort\n',
+        'echo "|" | cat\n',
+        "echo '|'\n",
+        'echo \\| | cat\n',
+        'seq 1 50000 | wc -l\n',  # exceeds pipe capacity
+        'yes | head -n 1\n',  # reader exits before the writer
+        'echo hello | cat\necho finished\n',
+
         'pwd\n',
         'whoami\n',
         'ls\n',
@@ -51,7 +61,12 @@ with tempfile.TemporaryDirectory() as directory:
     ]:
         compare(text, directory)
     for text in [
-        'echo hi >\n', 'echo "unfinished\n', 'echo trailing\\\n',
+        'echo hi >\n',
+        '| cat\n', 'echo hello |\n',
+        'echo hello | cat | cat\n',
+        'echo hello | cat > out\n',
+        'nonexistent-pipeline-program | cat\n',
+ 'echo "unfinished\n', 'echo trailing\\\n',
         'echo hi > > out\n', 'echo hi > out > other\n',
         'echo ' + 'x ' * 130 + '\n',
         'echo ' + 'x' * 1100 + '\n',

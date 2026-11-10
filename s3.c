@@ -240,42 +240,58 @@ static char *find_pipe(char *line)
     return NULL;
 }
 
+int command_with_pipe(char *line)
+{
+    return find_pipe(line) != NULL;
+}
+
 void launch_pipeline(char *line)
 {
     char *separator = find_pipe(line);
-    
+
     if (separator == NULL) {
         return;
     }
-    
+
+    /* This first version handles two external commands. */
+    if (find_pipe(separator + 1) != NULL) {
+        fprintf(stderr, "s3: only two pipeline commands are supported for now\n");
+        return;
+    }
+
     *separator = '\0';
-    
+
     char *left = line;
     char *right = separator + 1;
-    
+
     char left_line[2 * MAX_LINE];
     char right_line[2 * MAX_LINE];
-    
+
     strcpy(left_line, left);
     strcpy(right_line, right);
-    
+
     char *left_args[MAX_ARGS];
     char *right_args[MAX_ARGS];
     int left_argsc;
     int right_argsc;
-    
+
     if (!parse_command(left_line, left_args, &left_argsc)) {
         return;
     }
-    
+
     if (!parse_command(right_line, right_args, &right_argsc)) {
         return;
     }
-    
+
     if (left_argsc == 0 || right_argsc == 0) {
         fprintf(stderr, "s3: missing command beside pipe\n");
         return;
     }
+    if (command_with_redirection(left) || command_with_redirection(right)) {
+        fprintf(stderr, "s3: redirection in pipelines is not supported yet\n");
+        return;
+    }
+
     int pipefd[2];
 
     if (pipe(pipefd) == -1) {
@@ -291,16 +307,16 @@ void launch_pipeline(char *line)
         close(pipefd[1]);
         return;
     }
-    
+
     if (left_pid == 0) {
         if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
             perror("dup2");
             _exit(1);
         }
-    
+
         close(pipefd[0]);
         close(pipefd[1]);
-    
+
         child(left_args, left_argsc);
     }
 
@@ -313,27 +329,27 @@ void launch_pipeline(char *line)
         waitpid(left_pid, NULL, 0);
         return;
     }
-    
+
     if (right_pid == 0) {
         if (dup2(pipefd[0], STDIN_FILENO) == -1) {
             perror("dup2");
             _exit(1);
         }
-    
+
         close(pipefd[0]);
         close(pipefd[1]);
-    
+
         child(right_args, right_argsc);
     }
-    
+
     // Parent: close its copies of both ends.
     close(pipefd[0]);
     close(pipefd[1]);
-    
+
     // Both children have started. Now wait for them.
     waitpid(left_pid, NULL, 0);
     waitpid(right_pid, NULL, 0);
-    }
+}
 
 void child_with_redirection(char *args[], int argsc, enum RedirType type, char *filename)
 {

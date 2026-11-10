@@ -59,4 +59,6 @@ void child(char *args[], int argsc);
 
 ///Program launching functions (add more as appropriate)
 void launch_program(char *args[], int argsc);
+int command_with_pipe(char *line);
+void launch_pipeline(char *line);
 #endif
