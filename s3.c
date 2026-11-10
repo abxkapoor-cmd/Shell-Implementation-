@@ -160,44 +160,44 @@ void launch_program(char *args[], int argsc)
     if (strcmp(args[0], "cd") == 0) {
         static char previous_directory[MAX_LINE] = "";
         char current_directory[MAX_LINE];
-        
+
         if (argsc > 2) {
             fprintf(stderr, "cd: too many arguments\n");
             return;
         }
-        
+
         if (getcwd(current_directory, sizeof(current_directory)) == NULL) {
             perror("cd: getcwd");
             return;
-            
-        char *directory;
-        
-    if (argsc == 1) {
-        directory = getenv("HOME");
-        if (directory == NULL) {
-            fprintf(stderr, "cd: HOME is not set\n");
-            return;
         }
-    } else if (strcmp(args[1], "-") == 0) {
-    if (previous_directory[0] == '\0') {
-        fprintf(stderr, "cd: no previous directory\n");
+
+        char *directory;
+
+        if (argsc == 1) {
+            directory = getenv("HOME");
+            if (directory == NULL) {
+                fprintf(stderr, "cd: HOME is not set\n");
+                return;
+            }
+        } else if (strcmp(args[1], "-") == 0) {
+            if (previous_directory[0] == '\0') {
+                fprintf(stderr, "cd: no previous directory\n");
+                return;
+            }
+            directory = previous_directory;
+        } else {
+            directory = args[1];
+        }
+
+        if (chdir(directory) == -1) {
+            perror("cd");
+        } else {
+            // Save the old path only if the change succeeded.
+            strcpy(previous_directory, current_directory);
+        }
+
         return;
     }
-    directory = previous_directory;
-} else {
-    directory = args[1];
-}
-    }
-
-    if (chdir(directory) == -1) {
-        perror("cd");
-    } else {
-        // save the old path only if the change succeeded
-        strcpy(previous_directory, current_directory);
-    }
-
-    return;
-}
 
     int rc = fork();
     if (rc<0) {
