@@ -7,40 +7,89 @@ void construct_shell_prompt(char shell_prompt[])
 }
 
 ///Prints a shell prompt and reads input from the user
-void read_command_line(char line[])
+int read_command_line(char line[])
 {
-    char shell_prompt[MAX_PROMPT_LEN];
-    construct_shell_prompt(shell_prompt);
-    printf("%s", shell_prompt);
-    fflush(stdout); // print prompt now so the child doesn't print it again
-
-    ///See man page of fgets(...)
-    if (fgets(line, MAX_LINE, stdin) == NULL)
-    {
-        perror("fgets failed");
-        exit(1);
+    if (isatty(STDIN_FILENO)) {
+        char shell_prompt[MAX_PROMPT_LEN];
+        construct_shell_prompt(shell_prompt);
+        printf("%s", shell_prompt);
+        fflush(stdout);
     }
-    ///Remove newline (enter)
-    line[strlen(line) - 1] = '\0';
+    if (!fgets(line, MAX_LINE, stdin)) {
+        if (ferror(stdin))
+            perror("s3: input");
+        return 0;
+    }
+    size_t n = strlen(line);
+    if (n && line[n - 1] == '\n') {
+        line[n - 1] = '\0';
+    } else if (!feof(stdin)) {
+        int c = getchar();
+        if (c != '\n' && c != EOF) {
+            while ((c = getchar()) != '\n' && c != EOF) {}
+            fprintf(stderr, "s3: command line too long\n");
+            line[0] = '\0';
+        }
+    }
+    return 1;
 }
 
-void parse_command(char line[], char *args[], int *argsc)
+/* Token text is packed back into line. Operator tokens use stable addresses
+ * so a quoted or escaped ">" remains an ordinary argument. */
+static char input_operator[] = "<";
+static char output_operator[] = ">";
+static char append_operator[] = ">>";
+
+int parse_command(char line[], char *args[], int *argsc)
 {
-    ///Implements simple tokenization (space delimited)
-    ///Note: strtok puts '\0' (null) characters within the existing storage,
-    ///to split it into logical cstrings.
-    ///There is no dynamic allocation.
-
-    ///See the man page of strtok(...)
-    char *token = strtok(line, " ");
+    char source[MAX_LINE];
+    strcpy(source, line);
+    char *read = source;
+    char *write = line;
     *argsc = 0;
-    while (token != NULL && *argsc < MAX_ARGS - 1)
-    {
-        args[(*argsc)++] = token;
-        token = strtok(NULL, " ");
+    while (*read) {
+        while (*read == ' ' || *read == '\t' || *read == '\r') read++;
+        if (!*read) break;
+        if (*argsc == MAX_ARGS - 1) {
+            fprintf(stderr, "s3: too many arguments\n");
+            return 0;
+        }
+        if (*read == '<' || *read == '>') {
+            char op = *read++;
+            if (op == '<') args[(*argsc)++] = input_operator;
+            else if (*read == '>') {
+                read++;
+                args[(*argsc)++] = append_operator;
+            } else args[(*argsc)++] = output_operator;
+            continue;
+        }
+        args[(*argsc)++] = write;
+        char quote = 0;
+        while (*read) {
+            char c = *read;
+            if (!quote && (c == ' ' || c == '\t' || c == '\r' || c == '<' || c == '>')) break;
+            read++;
+            if (!quote && (c == '\'' || c == '"')) quote = c;
+            else if (quote && c == quote) quote = 0;
+            else if (c == '\\' && quote != '\'') {
+                if (!*read) {
+                    fprintf(stderr, "s3: unfinished escape\n");
+                    return 0;
+                }
+                /* In double quotes, only shell-special characters lose the slash. */
+                if (quote == '"' && *read != '"' && *read != '\\' && *read != '$' && *read != '`')
+                    *write++ = c;
+                *write++ = *read++;
+            } else *write++ = c;
+        }
+        if (quote) {
+            fprintf(stderr, "s3: unmatched quote\n");
+            return 0;
+        }
+        *write++ = '\0';
     }
-
-    args[*argsc] = NULL; ///args must be null terminated
+    args[*argsc] = NULL;
+    return 1;
 }
 
 // ---------- Redirection ----------
@@ -48,7 +97,14 @@ void parse_command(char line[], char *args[], int *argsc)
 // True if the line has a < or >
 int command_with_redirection(char line[])
 {
-    return strchr(line, '<') != NULL || strchr(line, '>') != NULL;
+    char quote = 0;
+    for (const char *p = line; *p; p++) {
+        if (*p == '\\' && quote != '\'' && p[1]) { p++; continue; }
+        if (quote) { if (*p == quote) quote = 0; }
+        else if (*p == '\'' || *p == '"') quote = *p;
+        else if (*p == '<' || *p == '>') return 1;
+    }
+    return 0;
 }
 
 // Returns index of the operator (-1 if none), sets *type to which one
@@ -57,9 +113,9 @@ int find_redirection(char *args[], int argsc, enum RedirType *type)
 {
     for (int i = 0; i < argsc; i++)
     {
-        if (strcmp(args[i], "<") == 0)  { *type = REDIR_IN;     return i; }
-        if (strcmp(args[i], ">") == 0)  { *type = REDIR_OUT;    return i; }
-        if (strcmp(args[i], ">>") == 0) { *type = REDIR_APPEND; return i; }
+        if (args[i] == input_operator)  { *type = REDIR_IN;     return i; }
+        if (args[i] == output_operator)  { *type = REDIR_OUT;    return i; }
+        if (args[i] == append_operator) { *type = REDIR_APPEND; return i; }
     }
     *type = REDIR_NONE;
     return -1;
@@ -74,6 +130,7 @@ void child(char *args[], int argsc)
     ///of the command specified in args[ARG_PROGNAME].
     ///For reference, see the code in lecture 3.
 
+    (void)argsc;
     execvp(args[ARG_PROGNAME],args);
     perror(args[ARG_PROGNAME]);
     exit(1);
@@ -110,7 +167,7 @@ void launch_program(char *args[], int argsc)
         child(args, argsc);
     }
     else{
-        // main will reap
+        reap();
     }
 }
 
@@ -132,7 +189,11 @@ void child_with_redirection(char *args[], int argsc, enum RedirType type, char *
     }
 
     int slot = (type == REDIR_IN) ? STDIN_FILENO : STDOUT_FILENO;
-    dup2(fd, slot); // slot now goes to the file
+    if (dup2(fd, slot) < 0) {
+        perror("dup2");
+        close(fd);
+        exit(1);
+    }
     close(fd);      // don't need the extra fd anymore
 
     child(args, argsc); // exec keeps the redirected slots
@@ -143,25 +204,36 @@ void launch_program_with_redirection(char *args[], int argsc)
     enum RedirType type;
     int i = find_redirection(args, argsc, &type);
 
-    if (i <= 0 || i + 1 >= argsc) // need a command before and a file after
-    {
+    if (i < 0) {
+        launch_program(args, argsc);
+        return;
+    }
+    /* This stage supports one redirection per command. Reject extras rather
+     * than silently executing a different command. */
+    if (i == 0 || i + 1 >= argsc ||
+        args[i + 1] == input_operator || args[i + 1] == output_operator ||
+        args[i + 1] == append_operator) {
         fprintf(stderr, "s3: syntax error near redirection\n");
         return;
     }
-
+    for (int j = i + 2; j < argsc; j++) {
+        if (args[j] == input_operator || args[j] == output_operator || args[j] == append_operator) {
+            fprintf(stderr, "s3: only one redirection is supported\n");
+            return;
+        }
+    }
     char *filename = args[i + 1];
-    args[i] = NULL; // cut args at the operator so the command doesn't see "> file"
-    argsc = i;
+    /* Keep ordinary arguments following the filename. */
+    for (int j = i; j + 2 <= argsc; j++) args[j] = args[j + 2];
+    argsc -= 2;
 
     int rc = fork();
-    if (rc < 0)
-    {
+    if (rc < 0) {
         perror("fork failed");
         return;
     }
-    else if (rc == 0)
-    {
+    if (rc == 0)
         child_with_redirection(args, argsc, type, filename);
-    }
-    // main will reap
+    else
+        reap();
 }

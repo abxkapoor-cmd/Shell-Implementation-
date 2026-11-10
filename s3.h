@@ -33,7 +33,7 @@ enum RedirType
     REDIR_APPEND, /// >>  write stdout to a file (append)
 };
 
-///With inline functions, the compiler replaces the function call 
+///With inline functions, the compiler replaces the function call
 ///with the actual function code;
 ///inline improves speed and readability; meant for short functions (a few lines).
 ///the static here avoids linker errors from multiple definitions (needed with inline).
@@ -43,12 +43,14 @@ static inline void reap()
 }
 
 ///Shell I/O and related functions (add more as appropriate)
-void read_command_line(char line[]);
+int read_command_line(char line[]);
 void construct_shell_prompt(char shell_prompt[]);
-void parse_command(char line[], char *args[], int *argsc);
+int parse_command(char line[], char *args[], int *argsc);
 
 // redirection parsing
 int command_with_redirection(char line[]);
+void launch_program_with_redirection(char *args[], int argsc);
+void child_with_redirection(char *args[], int argsc, enum RedirType type, char *filename);
 int find_redirection(char *args[], int argsc, enum RedirType *type);
 
 

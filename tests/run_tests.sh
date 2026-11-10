@@ -1,38 +1,4 @@
-
-S3=./build/s3
-passed=0
-failed=0
-
-check() {
-    cmd="$1"
-    expected=$(echo "$cmd" | bash 2>/dev/null)
-    actual=$(echo "$cmd" | $S3 2>/dev/null | sed 's/\[s3\]\$ //g')
-
-    if [ "$expected" == "$actual" ]; then
-        echo "PASS: $cmd"
-        passed=$((passed + 1))
-    else
-        echo "FAIL: $cmd"
-        echo "  expected: $expected"
-        echo "  got:      $actual"
-        failed=$((failed + 1))
-    fi
-}
-
- # tests:
-check "pwd"
-check "ls"
-check "whoami"
-check "ls -l"
-check "cat txt/phrases.txt"
-check "sort txt/phrases.txt"
-check "grep burn txt/phrases.txt"
-check "wc txt/phrases.txt"
-check "ls -R"
-check "uniq txt/phrases.txt"
-check "grep -n burn txt/phrases.txt"
-check "cal"
-check "cal -y"
-
-echo "$passed passed, $failed failed"
-[ $failed -eq 0 ]
+#!/usr/bin/env bash
+set -eu
+cd "$(dirname "$0")/.."
+S3="${S3:-./build/s3}" python3 tests/test_shell.py

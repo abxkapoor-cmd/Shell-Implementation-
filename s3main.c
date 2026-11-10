@@ -1,30 +1,20 @@
 #include "s3.h"
 
-int main(int argc, char *argv[]){
-
-    ///Stores the command line input
-    char line[MAX_LINE];
-
-    ///Stores pointers to command arguments.
-    ///The first element of the array is the command name.
+int main(void)
+{
+    /* Extra room for terminators inserted around adjacent operators. */
+    char line[2 * MAX_LINE];
     char *args[MAX_ARGS];
-
-    ///Stores the number of arguments
     int argsc;
 
-    while (1) {
-        read_command_line(line);
-        if (command_with_redirection(line)) {        // has < or > ?
-            parse_command(line, args, &argsc);
+    while (read_command_line(line)) {
+        int redirected = command_with_redirection(line);
+        if (!parse_command(line, args, &argsc) || argsc == 0)
+            continue;
+        if (redirected)
             launch_program_with_redirection(args, argsc);
-            reap();
-        } else {                                     
-            parse_command(line, args, &argsc);
+        else
             launch_program(args, argsc);
-            reap();
-        }
     }
-
-    return 0;
+    return ferror(stdin) ? 1 : 0;
 }
-
