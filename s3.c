@@ -157,6 +157,16 @@ void launch_program(char *args[], int argsc)
         exit(0);
     }
 
+    if (strcmp(args[0], "cd") == 0) {
+        if (argsc != 2) {
+            fprintf(stderr, "cd: expected one directory \n");
+            return;
+        }
+        if (chdir(args[1]) == -1) {
+            perror("cd");
+        }
+        return;
+    }
 
     int rc = fork();
     if (rc<0) {
