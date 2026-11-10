@@ -1,4 +1,4 @@
-"""Behavior checks for commands, redirection, and two-command pipelines."""
+"""Behavior checks for commands, redirection, and pipelines."""
 import os
 from pathlib import Path
 import subprocess
@@ -15,12 +15,22 @@ def run(text, cwd):
 
 def compare(text, cwd):
     global passed
-    expected = subprocess.run(['bash'], input=text, text=True, capture_output=True,
-                              cwd=cwd, timeout=5)
-    actual = run(text, cwd)
-    assert actual.stdout == expected.stdout, (text, actual.stdout, expected.stdout)
-    assert actual.returncode == 0, (text, actual.stderr)
-    assert not actual.stderr, (text, actual.stderr)
+    # Run each shell from the same clean path, and compare file contents too.
+    with tempfile.TemporaryDirectory(dir=cwd) as case_directory:
+        expected = subprocess.run(['bash'], input=text, text=True,
+                                  capture_output=True, cwd=case_directory, timeout=5)
+        expected_files = {p.name: p.read_bytes()
+                          for p in Path(case_directory).iterdir() if p.is_file()}
+        for path in Path(case_directory).iterdir():
+            path.unlink()
+
+        actual = run(text, case_directory)
+        actual_files = {p.name: p.read_bytes()
+                        for p in Path(case_directory).iterdir() if p.is_file()}
+        assert actual.stdout == expected.stdout, (text, actual.stdout, expected.stdout)
+        assert actual.returncode == 0, (text, actual.stderr)
+        assert not actual.stderr, (text, actual.stderr)
+        assert actual_files == expected_files, (text, actual_files, expected_files)
     passed += 1
 
 
@@ -29,6 +39,26 @@ with tempfile.TemporaryDirectory() as directory:
         'echo hello\nexit\n',
         'echo hello | wc -c\n',
         'echo hello|cat\n',
+        'echo hello | cat | cat\n',
+        'printf "b\\na\\n" | sort | head -n 1 | wc -l\n',
+        'seq 1 50000 | cat | wc -l\n',
+        'yes | cat | head -n 1\n',
+        'echo hello' + ' | cat' * 30 + '\n',
+        'echo hello | cat > out\n',
+        'echo hello|cat>out\n',
+        'echo old > out\necho new | cat > out\n',
+        'echo old > out\necho new | cat >> out\n',
+        'echo hello | cat >> new-file\n',
+        'echo hello > input\ncat < input | cat | wc -l\n',
+        'echo hello > input\ncat < input | cat > output\n',
+        'echo hello > middle | wc -c\n',
+        'echo hello | cat > middle | wc -c\n',
+        'echo file > input\necho pipe | cat < input\n',
+        'echo hello | cat > "file with spaces"\n',
+        'echo hello | echo > out trailing arguments\n',
+        'echo ">" | cat > ">"\n',
+        'echo "a|b" | cat | wc -c\n',
+
         'printf "b\\na\\n" | sort\n',
         'echo "|" | cat\n',
         "echo '|'\n",
@@ -63,10 +93,17 @@ with tempfile.TemporaryDirectory() as directory:
     for text in [
         'echo hi >\n',
         '| cat\n', 'echo hello |\n',
-        'echo hello | cat | cat\n',
-        'echo hello | cat > out\n',
+        'echo hello | | cat\n',
+        'echo hello | cat |\n',
+        'echo hello | cat >\n',
+        'echo hello | cat > > out\n',
+        'echo hello | cat > out >> other\n',
+        'echo hello | cat < missing-file\n',
+        'echo hello | cat > missing-directory/out\n',
+        'echo hello | cat | echo "unfinished\n',
+
         'nonexistent-pipeline-program | cat\n',
- 'echo "unfinished\n', 'echo trailing\\\n',
+        'echo "unfinished\n', 'echo trailing\\\n',
         'echo hi > > out\n', 'echo hi > out > other\n',
         'echo ' + 'x ' * 130 + '\n',
         'echo ' + 'x' * 1100 + '\n',

@@ -296,22 +296,22 @@ int prepare_pipeline(char *commands[],
 
         parsed[i].redir_type = REDIR_NONE;
         parsed[i].filename = NULL;
-        
+
         int redir_index = find_redirection(
             parsed[i].args,
             parsed[i].argsc,
             &parsed[i].redir_type
         );
-        
+
         if (redir_index != -1) {
             if (redir_index == 0 ||
                 redir_index + 1 >= parsed[i].argsc) {
                 fprintf(stderr, "s3: invalid redirection\n");
                 return 0;
             }
-        
+
             enum RedirType extra_type;
-        
+
             if (find_redirection(
                     parsed[i].args + redir_index + 1,
                     parsed[i].argsc - redir_index - 1,
@@ -319,15 +319,15 @@ int prepare_pipeline(char *commands[],
                 fprintf(stderr, "s3: only one redirection per command is supported\n");
                 return 0;
             }
-        
+
             parsed[i].filename = parsed[i].args[redir_index + 1];
             for (int j = redir_index; j < parsed[i].argsc - 2; j++) {
-            parsed[i].args[j] = parsed[i].args[j + 2];
+                parsed[i].args[j] = parsed[i].args[j + 2];
             }
 
-parsed[i].argsc -= 2;
-parsed[i].args[parsed[i].argsc] = NULL;
-}
+            parsed[i].argsc -= 2;
+            parsed[i].args[parsed[i].argsc] = NULL;
+        }
 
         if (parsed[i].argsc == 0) {
             fprintf(stderr, "s3: missing command beside pipe\n");
@@ -363,28 +363,28 @@ void launch_pipeline(char *line)
 
     int previous_read = -1;
     int launched = 0;
-    
+
     for (int i = 0; i < count; i++) {
         int next_pipe[2] = {-1, -1};
-    
+
         if (i < count - 1) {
             if (pipe(next_pipe) == -1) {
                 perror("pipe");
                 break;
             }
         }
-    
+
         pid_t pid = fork();
 
         if (pid < 0) {
             perror("fork");
-        
+
             if (next_pipe[0] != -1) close(next_pipe[0]);
             if (next_pipe[1] != -1) close(next_pipe[1]);
-        
+
             break;
         }
-        
+
         if (pid == 0) {
             // Read from the previous program, if there is one.
             if (previous_read != -1) {
@@ -393,7 +393,7 @@ void launch_pipeline(char *line)
                     _exit(1);
                 }
             }
-        
+
             // Write to the next program, if there is one.
             if (next_pipe[1] != -1) {
                 if (dup2(next_pipe[1], STDOUT_FILENO) == -1) {
@@ -401,48 +401,48 @@ void launch_pipeline(char *line)
                     _exit(1);
                 }
             }
-        
+
             if (previous_read != -1) close(previous_read);
             if (next_pipe[0] != -1) close(next_pipe[0]);
             if (next_pipe[1] != -1) close(next_pipe[1]);
-        
+
             if (parsed[i].redir_type == REDIR_NONE) {
-            child(parsed[i].args, parsed[i].argsc);
+                child(parsed[i].args, parsed[i].argsc);
             } else {
-            child_with_redirection(
-                parsed[i].args,
-                parsed[i].argsc,
-                parsed[i].redir_type,
-                parsed[i].filename
-            );
-        }
+                child_with_redirection(
+                    parsed[i].args,
+                    parsed[i].argsc,
+                    parsed[i].redir_type,
+                    parsed[i].filename
+                );
+            }
             _exit(1);
         }
-        
+
         // Only the parent reaches here.
         parsed[i].pid = pid;
         launched++;
-    
+
         if (previous_read != -1) {
             close(previous_read);
         }
-    
+
         if (next_pipe[1] != -1) {
             close(next_pipe[1]);
         }
-    
+
         previous_read = next_pipe[0];
-        }
-    
-        if (previous_read != -1) {
-            close(previous_read);
-        }
-        
-        for (int i = 0; i < launched; i++) {
+    }
+
+    if (previous_read != -1) {
+        close(previous_read);
+    }
+
+    for (int i = 0; i < launched; i++) {
         waitpid(parsed[i].pid, NULL, 0);
     }
-        free(parsed);
-    }
+    free(parsed);
+}
 
 void child_with_redirection(char *args[], int argsc, enum RedirType type, char *filename)
 {
