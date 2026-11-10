@@ -178,8 +178,15 @@ void launch_program(char *args[], int argsc)
             fprintf(stderr, "cd: HOME is not set\n");
             return;
         }
-    } else {
-        directory = args[1];
+    } else if (strcmp(args[1], "-") == 0) {
+    if (previous_directory[0] == '\0') {
+        fprintf(stderr, "cd: no previous directory\n");
+        return;
+    }
+    directory = previous_directory;
+} else {
+    directory = args[1];
+}
     }
 
     if (chdir(directory) == -1) {
