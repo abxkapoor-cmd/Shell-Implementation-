@@ -158,14 +158,20 @@ void launch_program(char *args[], int argsc)
     }
 
     if (strcmp(args[0], "cd") == 0) {
+        static char previous_directory[MAX_LINE] = "";
+        char current_directory[MAX_LINE];
+        
         if (argsc > 2) {
             fprintf(stderr, "cd: too many arguments\n");
             return;
         }
-
+        
+        if (getcwd(current_directory, sizeof(current_directory)) == NULL) {
+            perror("cd: getcwd");
+            return;
+            
         char *directory;
         
-
     if (argsc == 1) {
         directory = getenv("HOME");
         if (directory == NULL) {
@@ -178,6 +184,9 @@ void launch_program(char *args[], int argsc)
 
     if (chdir(directory) == -1) {
         perror("cd");
+    } else {
+        // save the old path only if the change succeeded
+        strcpy(previous_directory, current_directory);
     }
 
     return;
