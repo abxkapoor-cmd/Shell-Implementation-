@@ -277,6 +277,8 @@ struct PipelineCommand {
     char *args[MAX_ARGS];
     int argsc;
     pid_t pid;
+    enum RedirType redir_type;
+    char *filename;
 };
 
 int prepare_pipeline(char *commands[],
@@ -291,6 +293,41 @@ int prepare_pipeline(char *commands[],
                            &parsed[i].argsc)) {
             return 0;
         }
+
+        parsed[i].redir_type = REDIR_NONE;
+        parsed[i].filename = NULL;
+        
+        int redir_index = find_redirection(
+            parsed[i].args,
+            parsed[i].argsc,
+            &parsed[i].redir_type
+        );
+        
+        if (redir_index != -1) {
+            if (redir_index == 0 ||
+                redir_index + 1 >= parsed[i].argsc) {
+                fprintf(stderr, "s3: invalid redirection\n");
+                return 0;
+            }
+        
+            enum RedirType extra_type;
+        
+            if (find_redirection(
+                    parsed[i].args + redir_index + 1,
+                    parsed[i].argsc - redir_index - 1,
+                    &extra_type) != -1) {
+                fprintf(stderr, "s3: only one redirection per command is supported\n");
+                return 0;
+            }
+        
+            parsed[i].filename = parsed[i].args[redir_index + 1];
+            for (int j = redir_index; j < parsed[i].argsc - 2; j++) {
+            parsed[i].args[j] = parsed[i].args[j + 2];
+            }
+
+parsed[i].argsc -= 2;
+parsed[i].args[parsed[i].argsc] = NULL;
+}
 
         if (parsed[i].argsc == 0) {
             fprintf(stderr, "s3: missing command beside pipe\n");
@@ -369,7 +406,16 @@ void launch_pipeline(char *line)
             if (next_pipe[0] != -1) close(next_pipe[0]);
             if (next_pipe[1] != -1) close(next_pipe[1]);
         
+            if (parsed[i].redir_type == REDIR_NONE) {
             child(parsed[i].args, parsed[i].argsc);
+            } else {
+            child_with_redirection(
+                parsed[i].args,
+                parsed[i].argsc,
+                parsed[i].redir_type,
+                parsed[i].filename
+            );
+        }
             _exit(1);
         }
         
