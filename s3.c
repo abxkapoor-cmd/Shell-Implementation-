@@ -1,9 +1,16 @@
 #include "s3.h"
 
-///Simple for now, but will be expanded in a following section
 void construct_shell_prompt(char shell_prompt[])
 {
-    strcpy(shell_prompt, "[s3]$ ");
+    char directory[MAX_PROMPT_LEN];
+
+    if (getcwd(directory, sizeof(directory)) == NULL) {
+        strcpy(shell_prompt, "[s3]$ ");
+        return;
+    }
+
+    snprintf(shell_prompt, MAX_PROMPT_LEN,
+             "[%s s3]$ ", directory);
 }
 
 ///Prints a shell prompt and reads input from the user
