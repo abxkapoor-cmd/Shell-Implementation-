@@ -146,17 +146,6 @@ void child(char *args[], int argsc)
 
 void launch_program(char *args[], int argsc)
 {
-    ///Implement this function:
-
-    ///fork() a child process.
-    ///In the child part of the code,
-    ///call child(args, argv)
-    ///For reference, see the code in lecture 2.
-
-    ///Handle the 'exit' command;
-    ///so that the shell, not the child process,
-    ///exits.
-
     if (args[0] == NULL){
         return;
     }
@@ -219,6 +208,132 @@ void launch_program(char *args[], int argsc)
     }
 }
 
+static char *find_pipe(char *line)
+{
+    char quote = 0;
+    int depth = 0;
+
+    for (char *p = line; *p != '\0'; p++) {
+        if (*p == '\\' && quote != '\'' && p[1] != '\0') {
+            p++;
+            continue;
+        }
+
+        if (quote != 0) {
+            if (*p == quote) {
+                quote = 0;
+            }
+            continue;
+        }
+
+        if (*p == '\'' || *p == '"') {
+            quote = *p;
+        } else if (*p == '(') {
+            depth++;
+        } else if (*p == ')') {
+            depth--;
+        } else if (*p == '|' && depth == 0) {
+            return p;
+        }
+    }
+
+    return NULL;
+}
+
+void launch_pipeline(char *line)
+{
+    char *separator = find_pipe(line);
+    
+    if (separator == NULL) {
+        return;
+    }
+    
+    *separator = '\0';
+    
+    char *left = line;
+    char *right = separator + 1;
+    
+    char left_line[2 * MAX_LINE];
+    char right_line[2 * MAX_LINE];
+    
+    strcpy(left_line, left);
+    strcpy(right_line, right);
+    
+    char *left_args[MAX_ARGS];
+    char *right_args[MAX_ARGS];
+    int left_argsc;
+    int right_argsc;
+    
+    if (!parse_command(left_line, left_args, &left_argsc)) {
+        return;
+    }
+    
+    if (!parse_command(right_line, right_args, &right_argsc)) {
+        return;
+    }
+    
+    if (left_argsc == 0 || right_argsc == 0) {
+        fprintf(stderr, "s3: missing command beside pipe\n");
+        return;
+    }
+    int pipefd[2];
+
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        return;
+    }
+
+    pid_t left_pid = fork();
+
+    if (left_pid < 0) {
+        perror("fork");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return;
+    }
+    
+    if (left_pid == 0) {
+        if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+            perror("dup2");
+            _exit(1);
+        }
+    
+        close(pipefd[0]);
+        close(pipefd[1]);
+    
+        child(left_args, left_argsc);
+    }
+
+    pid_t right_pid = fork();
+
+    if (right_pid < 0) {
+        perror("fork");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        waitpid(left_pid, NULL, 0);
+        return;
+    }
+    
+    if (right_pid == 0) {
+        if (dup2(pipefd[0], STDIN_FILENO) == -1) {
+            perror("dup2");
+            _exit(1);
+        }
+    
+        close(pipefd[0]);
+        close(pipefd[1]);
+    
+        child(right_args, right_argsc);
+    }
+    
+    // Parent: close its copies of both ends.
+    close(pipefd[0]);
+    close(pipefd[1]);
+    
+    // Both children have started. Now wait for them.
+    waitpid(left_pid, NULL, 0);
+    waitpid(right_pid, NULL, 0);
+    }
 
 void child_with_redirection(char *args[], int argsc, enum RedirType type, char *filename)
 {
