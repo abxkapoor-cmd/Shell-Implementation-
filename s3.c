@@ -240,116 +240,163 @@ static char *find_pipe(char *line)
     return NULL;
 }
 
+int split_pipeline(char *line, char *commands[], int capacity)
+{
+    int count = 0;
+    char *remaining = line;
+
+    while (1) {
+        if (count == capacity) {
+            fprintf(stderr, "s3: too many pipeline commands\n");
+            return -1;
+        }
+
+        commands[count] = remaining;
+        count++;
+
+        char *separator = find_pipe(remaining);
+
+        if (separator == NULL) {
+            break;
+        }
+
+        *separator = '\0';
+        remaining = separator + 1;
+    }
+
+    return count;
+}
+
 int command_with_pipe(char *line)
 {
     return find_pipe(line) != NULL;
 }
 
+struct PipelineCommand {
+    char text[2 * MAX_LINE];
+    char *args[MAX_ARGS];
+    int argsc;
+    pid_t pid;
+};
+
+int prepare_pipeline(char *commands[],
+                     struct PipelineCommand parsed[],
+                     int count)
+{
+    for (int i = 0; i < count; i++) {
+        strcpy(parsed[i].text, commands[i]);
+
+        if (!parse_command(parsed[i].text,
+                           parsed[i].args,
+                           &parsed[i].argsc)) {
+            return 0;
+        }
+
+        if (parsed[i].argsc == 0) {
+            fprintf(stderr, "s3: missing command beside pipe\n");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 void launch_pipeline(char *line)
 {
-    char *separator = find_pipe(line);
+    char *commands[MAX_LINE];
 
-    if (separator == NULL) {
+    int count = split_pipeline(line, commands, MAX_LINE);
+
+    if (count == -1) {
         return;
     }
 
-    /* This first version handles two external commands. */
-    if (find_pipe(separator + 1) != NULL) {
-        fprintf(stderr, "s3: only two pipeline commands are supported for now\n");
+    struct PipelineCommand *parsed =
+        calloc(count, sizeof(struct PipelineCommand));
+
+    if (parsed == NULL) {
+        perror("pipeline allocation");
         return;
     }
 
-    *separator = '\0';
-
-    char *left = line;
-    char *right = separator + 1;
-
-    char left_line[2 * MAX_LINE];
-    char right_line[2 * MAX_LINE];
-
-    strcpy(left_line, left);
-    strcpy(right_line, right);
-
-    char *left_args[MAX_ARGS];
-    char *right_args[MAX_ARGS];
-    int left_argsc;
-    int right_argsc;
-
-    if (!parse_command(left_line, left_args, &left_argsc)) {
+    if (!prepare_pipeline(commands, parsed, count)) {
+        free(parsed);
         return;
     }
 
-    if (!parse_command(right_line, right_args, &right_argsc)) {
-        return;
-    }
+    int previous_read = -1;
+    int launched = 0;
+    
+    for (int i = 0; i < count; i++) {
+        int next_pipe[2] = {-1, -1};
+    
+        if (i < count - 1) {
+            if (pipe(next_pipe) == -1) {
+                perror("pipe");
+                break;
+            }
+        }
+    
+        pid_t pid = fork();
 
-    if (left_argsc == 0 || right_argsc == 0) {
-        fprintf(stderr, "s3: missing command beside pipe\n");
-        return;
-    }
-    if (command_with_redirection(left) || command_with_redirection(right)) {
-        fprintf(stderr, "s3: redirection in pipelines is not supported yet\n");
-        return;
-    }
-
-    int pipefd[2];
-
-    if (pipe(pipefd) == -1) {
-        perror("pipe");
-        return;
-    }
-
-    pid_t left_pid = fork();
-
-    if (left_pid < 0) {
-        perror("fork");
-        close(pipefd[0]);
-        close(pipefd[1]);
-        return;
-    }
-
-    if (left_pid == 0) {
-        if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
-            perror("dup2");
+        if (pid < 0) {
+            perror("fork");
+        
+            if (next_pipe[0] != -1) close(next_pipe[0]);
+            if (next_pipe[1] != -1) close(next_pipe[1]);
+        
+            break;
+        }
+        
+        if (pid == 0) {
+            // Read from the previous program, if there is one.
+            if (previous_read != -1) {
+                if (dup2(previous_read, STDIN_FILENO) == -1) {
+                    perror("dup2");
+                    _exit(1);
+                }
+            }
+        
+            // Write to the next program, if there is one.
+            if (next_pipe[1] != -1) {
+                if (dup2(next_pipe[1], STDOUT_FILENO) == -1) {
+                    perror("dup2");
+                    _exit(1);
+                }
+            }
+        
+            if (previous_read != -1) close(previous_read);
+            if (next_pipe[0] != -1) close(next_pipe[0]);
+            if (next_pipe[1] != -1) close(next_pipe[1]);
+        
+            child(parsed[i].args, parsed[i].argsc);
             _exit(1);
         }
-
-        close(pipefd[0]);
-        close(pipefd[1]);
-
-        child(left_args, left_argsc);
-    }
-
-    pid_t right_pid = fork();
-
-    if (right_pid < 0) {
-        perror("fork");
-        close(pipefd[0]);
-        close(pipefd[1]);
-        waitpid(left_pid, NULL, 0);
-        return;
-    }
-
-    if (right_pid == 0) {
-        if (dup2(pipefd[0], STDIN_FILENO) == -1) {
-            perror("dup2");
-            _exit(1);
+        
+        // Only the parent reaches here.
+        parsed[i].pid = pid;
+        launched++;
+    
+        if (previous_read != -1) {
+            close(previous_read);
         }
-
-        close(pipefd[0]);
-        close(pipefd[1]);
-
-        child(right_args, right_argsc);
+    
+        if (next_pipe[1] != -1) {
+            close(next_pipe[1]);
+        }
+    
+        previous_read = next_pipe[0];
+        }
+    
+        if (previous_read != -1) {
+            close(previous_read);
+        }
+        
+        for (int i = 0; i < launched; i++) {
+        waitpid(parsed[i].pid, NULL, 0);
     }
-
-    // Parent: close its copies of both ends.
-    close(pipefd[0]);
-    close(pipefd[1]);
-
-    // Both children have started. Now wait for them.
-    waitpid(left_pid, NULL, 0);
-    waitpid(right_pid, NULL, 0);
-}
+        free(parsed);
+    }
 
 void child_with_redirection(char *args[], int argsc, enum RedirType type, char *filename)
 {
