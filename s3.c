@@ -158,15 +158,30 @@ void launch_program(char *args[], int argsc)
     }
 
     if (strcmp(args[0], "cd") == 0) {
-        if (argsc != 2) {
-            fprintf(stderr, "cd: expected one directory \n");
+        if (argsc > 2) {
+            fprintf(stderr, "cd: too many arguments\n");
             return;
         }
-        if (chdir(args[1]) == -1) {
-            perror("cd");
+
+        char *directory;
+        
+
+    if (argsc == 1) {
+        directory = getenv("HOME");
+        if (directory == NULL) {
+            fprintf(stderr, "cd: HOME is not set\n");
+            return;
         }
-        return;
+    } else {
+        directory = args[1];
     }
+
+    if (chdir(directory) == -1) {
+        perror("cd");
+    }
+
+    return;
+}
 
     int rc = fork();
     if (rc<0) {
