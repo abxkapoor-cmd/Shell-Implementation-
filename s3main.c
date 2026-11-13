@@ -4,22 +4,13 @@ int main(void)
 {
     /* Extra room for terminators inserted around adjacent operators. */
     char line[2 * MAX_LINE];
-    char *args[MAX_ARGS];
-    int argsc;
+
 
     while (read_command_line(line)) {
-        if (command_with_pipe(line)) {
-            launch_pipeline(line);
-            continue;
-        }
-
-        int redirected = command_with_redirection(line);
-        if (!parse_command(line, args, &argsc) || argsc == 0)
-            continue;
-        if (redirected)
-            launch_program_with_redirection(args, argsc);
-        else
-            launch_program(args, argsc);
+        run_batch(line);
     }
+
     return ferror(stdin) ? 1 : 0;
+
 }
+

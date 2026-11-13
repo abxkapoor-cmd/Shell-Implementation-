@@ -61,4 +61,5 @@ void child(char *args[], int argsc);
 void launch_program(char *args[], int argsc);
 int command_with_pipe(char *line);
 void launch_pipeline(char *line);
+void run_batch(char *line);
 #endif
