@@ -208,7 +208,7 @@ void launch_program(char *args[], int argsc)
     }
 }
 
-static char *find_pipe(char *line)
+static char *find_separator(char *line, char sep)
 {
     char quote = 0;
     int depth = 0;
@@ -232,7 +232,7 @@ static char *find_pipe(char *line)
             depth++;
         } else if (*p == ')') {
             depth--;
-        } else if (*p == '|' && depth == 0) {
+        } else if (*p == sep && depth == 0) {
             return p;
         }
     }
@@ -240,7 +240,7 @@ static char *find_pipe(char *line)
     return NULL;
 }
 
-int split_pipeline(char *line, char *commands[], int capacity)
+int split_pipeline(char *line, char *commands[], int capacity, char sep)
 {
     int count = 0;
     char *remaining = line;
@@ -254,7 +254,7 @@ int split_pipeline(char *line, char *commands[], int capacity)
         commands[count] = remaining;
         count++;
 
-        char *separator = find_pipe(remaining);
+        char *separator = find_separator(remaining, sep);
 
         if (separator == NULL) {
             break;
@@ -269,7 +269,7 @@ int split_pipeline(char *line, char *commands[], int capacity)
 
 int command_with_pipe(char *line)
 {
-    return find_pipe(line) != NULL;
+    return find_separator(line, '|') != NULL;
 }
 
 struct PipelineCommand {
@@ -342,7 +342,7 @@ void launch_pipeline(char *line)
 {
     char *commands[MAX_LINE];
 
-    int count = split_pipeline(line, commands, MAX_LINE);
+    int count = split_pipeline(line, commands, MAX_LINE, '|');
 
     if (count == -1) {
         return;
@@ -508,4 +508,35 @@ void launch_program_with_redirection(char *args[], int argsc)
         child_with_redirection(args, argsc, type, filename);
     else
         reap();
+}
+
+static void run_command(char *line){
+    char *args[MAX_ARGS];
+    int argsc;
+
+    if (command_with_pipe(line)) {
+        launch_pipeline(line);
+        return;
+    }
+
+    int redirected = command_with_redirection(line);
+    if (!parse_command(line, args, &argsc) || argsc == 0)
+        return;
+    if (redirected)
+        launch_program_with_redirection(args, argsc);
+    else
+        launch_program(args, argsc);
+    
+}
+
+void run_batch(char *line){
+    char *pieces[MAX_ARGS];
+    int count = split_pipeline(line, pieces, MAX_ARGS, ';');
+    if (count == -1){
+        return;
+    }
+    for (int i = 0; i<count; i++){
+        run_command(pieces[i]);
+    }
+
 }

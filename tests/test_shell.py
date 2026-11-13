@@ -88,6 +88,19 @@ with tempfile.TemporaryDirectory() as directory:
         'echo hi > ">"\ncat < ">"\n',
         'echo "a\\qb"\n',
         'exit\necho should-not-run\n',
+
+        'mkdir d\ncd d\npwd\n',
+        'mkdir d\ncd d\ncd ..\npwd\n',
+
+        'echo a; echo b; echo c\n',
+        'echo a;echo b\n',
+        'false ; echo runs anyway\n',
+        'echo "a;b"\n',
+        'echo a ;\n',
+        'echo hi | cat ; echo after\n',
+        'echo a > out ; echo b >> out ; cat < out\n',
+        'mkdir d ; cd d ; pwd\n',       
+
     ]:
         compare(text, directory)
     for text in [
