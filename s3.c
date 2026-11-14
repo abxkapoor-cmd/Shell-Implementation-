@@ -510,12 +510,43 @@ void launch_program_with_redirection(char *args[], int argsc)
         reap();
 }
 
+static int command_is_subshell(char *line, int *start, int *end){
+    int i = 0;
+    while (line[i]==' '){
+        i++;
+    }
+    int j = (int)strlen(line) - 1;
+    while (j>i && line[j]==' '){
+        j--;
+    }
+    if (line[i]=='(' && line[j] == ')'){
+        *start = i;
+        *end = j;
+        return 1;
+    }
+    return 0;
+}
+
+static void launch_subshell(char *line, int start, int end){
+    line[end] = '\0';
+    char *inner = &line[start + 1];
+    char *sub_args[] =  {"/proc/self/exe", inner, NULL};
+    launch_program(sub_args, 2);
+}
+
 static void run_command(char *line){
     char *args[MAX_ARGS];
     int argsc;
 
     if (command_with_pipe(line)) {
         launch_pipeline(line);
+        return;
+    }
+
+    int start, end;
+    int i = command_is_subshell(line, &start, &end);
+    if (i == 1){
+        launch_subshell(line, start, end);
         return;
     }
 
