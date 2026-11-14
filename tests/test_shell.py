@@ -1,4 +1,4 @@
-"""Behavior checks for commands, redirection, and pipelines."""
+
 import os
 from pathlib import Path
 import subprocess
