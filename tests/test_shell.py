@@ -99,7 +99,13 @@ with tempfile.TemporaryDirectory() as directory:
         'echo hi | cat ; echo after\n',
         'echo a > out ; echo b >> out ; cat < out\n',
              
+        '(echo a ; echo b) | wc -l\n',
+        'echo hi | (cat ; echo there)\n',
+        '((echo a ; echo b) ; echo c)\n',
+        '(((echo deep)))\n',
+        '(cd .. ; pwd) ; pwd\n',
 
+        
     ]:
         compare(text, directory)
     for text in [
