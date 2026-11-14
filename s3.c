@@ -272,6 +272,23 @@ int command_with_pipe(char *line)
     return find_separator(line, '|') != NULL;
 }
 
+static int command_is_subshell(char *line, int *start, int *end){
+    int i = 0;
+    while (line[i]==' '){
+        i++;
+    }
+    int j = (int)strlen(line) - 1;
+    while (j>i && line[j]==' '){
+        j--;
+    }
+    if (line[i]=='(' && line[j] == ')'){
+        *start = i;
+        *end = j;
+        return 1;
+    }
+    return 0;
+}
+
 struct PipelineCommand {
     char text[2 * MAX_LINE];
     char *args[MAX_ARGS];
@@ -287,6 +304,18 @@ int prepare_pipeline(char *commands[],
 {
     for (int i = 0; i < count; i++) {
         strcpy(parsed[i].text, commands[i]);
+
+        int start, end;
+        if (command_is_subshell(parsed[i].text, &start, &end)){
+            parsed[i].text[end] = '\0';
+            parsed[i].args[0] = "/proc/self/exe";
+            parsed[i].args[1] = &parsed[i].text[start + 1];
+            parsed[i].args[2] = NULL;
+            parsed[i].argsc = 2;
+            parsed[i].redir_type = REDIR_NONE;
+            parsed[i].filename = NULL;
+            continue;
+        }
 
         if (!parse_command(parsed[i].text,
                            parsed[i].args,
@@ -510,22 +539,6 @@ void launch_program_with_redirection(char *args[], int argsc)
         reap();
 }
 
-static int command_is_subshell(char *line, int *start, int *end){
-    int i = 0;
-    while (line[i]==' '){
-        i++;
-    }
-    int j = (int)strlen(line) - 1;
-    while (j>i && line[j]==' '){
-        j--;
-    }
-    if (line[i]=='(' && line[j] == ')'){
-        *start = i;
-        *end = j;
-        return 1;
-    }
-    return 0;
-}
 
 static void launch_subshell(char *line, int start, int end){
     line[end] = '\0';
